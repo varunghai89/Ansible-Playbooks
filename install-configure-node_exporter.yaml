@@ -1,0 +1,80 @@
+---
+- name: Install and Configure Node Exporter
+  hosts: sla_server
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Create user node_exporter
+      user:
+        name: node_exporter
+        shell: /bin/false
+        system: yes
+
+    - name: Grant permissions to node_exporter user
+      lineinfile:
+        dest: /etc/sudoers.d/node_exporter
+        line: "node_exporter ALL=(ALL) NOPASSWD: ALL"
+        create: yes
+
+    - name: Download Node Exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v1.7.0/node_exporter-1.7.0.linux-amd64.tar.gz"
+        dest: "/tmp/node_exporter-1.7.0.linux-amd64.tar.gz"
+
+    - name: Extract Node Exporter binary
+      unarchive:
+        src: "/tmp/node_exporter-1.7.0.linux-amd64.tar.gz"
+        dest: "/tmp/"
+        remote_src: yes
+
+    - name: Move Node Exporter binary to bin
+      command: "mv /tmp/node_exporter-1.7.0.linux-amd64/node_exporter /usr/local/bin/"
+      become: yes
+
+    - name: Make Node Exporter binary executable
+      file:
+        path: "/usr/local/bin/node_exporter"
+        mode: "ugo+rx"
+      become: yes
+
+    - name: Cleanup directory
+      file:
+        path: "/tmp/node_exporter-1.7.0.linux-amd64"
+        state: absent
+      become: yes
+
+    - name: Create systemd service file
+      template:
+        src: /root/ansible/playbooks/tmp/node_exporter.service.j2
+        dest: /etc/systemd/system/node_exporter.service
+      notify: Restart Node Exporter
+
+    - name: Enable and start Node Exporter service
+      systemd:
+        name: node_exporter
+        state: started
+        enabled: yes
+
+    - name: Open port 9100 in firewall
+      firewalld:
+        port: 9100/tcp
+        state: enabled
+        permanent: yes
+      notify: Reload Firewalld
+
+    - name: Clean up temporary files
+      file:
+        path: "/tmp/node_exporter-1.7.0.linux-amd64.tar.gz"
+        state: absent
+
+  handlers:
+    - name: Restart Node Exporter
+      systemd:
+        name: node_exporter
+        state: restarted
+
+    - name: Reload Firewalld
+      service:
+        name: firewalld
+        state: reloaded

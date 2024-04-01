@@ -1,0 +1,10 @@
+---
+- name: Restart Node Exporter Service
+  hosts: pe_mains
+  become: yes
+  tasks:
+    - name: Restart Node Exporter
+      systemd:
+        name: node_exporter
+        state: started
+      ignore_errors: yes  # Ignore errors if Promtail service does not exist on the host
